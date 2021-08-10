@@ -1,0 +1,110 @@
+- name: Install Postgres db
+  hosts: postgres
+  become: yes
+  become_user: root
+  vars:
+    db_password: postgres
+  # remote_user: root
+
+
+  tasks:
+    - name: Install configuration package
+      yum:
+        name: https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+    - name: Install Postgresql server
+      yum:
+        name: postgresql11-server
+
+    - name: InitDB
+      command: /usr/pgsql-11/bin/postgresql-11-setup initdb
+      # environment:
+      #  PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+    - name: Start and enable postgres
+      service:
+        daemon_reload: yes
+        name: postgresql-11
+        state: started
+        enabled: yes
+      when: ansible_service_mgr == "systemd"
+    
+    - name: EPEL
+      yum:
+        name: epel-release
+
+    - name: Pip
+      yum:
+        name: python-pip
+
+    - name: psycopg2
+      pip:
+        name: psycopg2-binary
+
+    - name: Grant access for users from network with client md5 authentication.
+      postgresql_pg_hba:
+        dest: /var/lib/pgsql/11/data/pg_hba.conf
+        contype: host
+        users: all
+        source: 0.0.0.0/0
+        databases: all
+        method: md5
+
+    - name: Change ident to md5
+      lineinfile:
+        path: /var/lib/pgsql/11/data/pg_hba.conf
+        regexp: 'local   all             all                                     peer'
+        line: 'local   all             all                                     md5'
+
+    - name: Change listened addresses
+      blockinfile:
+        dest: /var/lib/pgsql/11/data/postgresql.conf
+        block: |
+          listen_addresses = '*'
+          port = 5432
+
+    - name: Create postgres user 
+      become: yes
+      become_user: postgres
+      postgresql_user:
+        name: "postgres"
+        password: "{{ db_password }}"
+#        password: "postgres"
+        role_attr_flags: CREATEDB,NOSUPERUSER
+
+    - name: Create DB
+      become: yes
+      become_user: postgres
+      postgresql_db:
+        name: ss_demo_1
+        owner: postgres
+
+    # - name: Add password for user postgres
+    #   command: sudo -u postgres psql --command "ALTER USER postgres WITH ENCRYPTED PASSWORD 'postgres';"
+
+
+    # - name: Create DB
+    #   command: sudo -u postgres psql --command "CREATE DATABASE ss_demo_1;"
+
+    # - name: Create a new database with name "ss_demo_1"
+    #   postgresql_db:
+    #     name: ss_demo_1
+    #     login_password: "postgres"
+    
+
+    - name: GRANT ALL PRIVILEGES ON DATABASE ss_demo_1 TO postgres
+      become: yes
+      become_user: postgres
+      postgresql_privs:
+        db: ss_demo_1
+        privs: ALL
+        type: database
+        role: postgres 
+           
+
+    - name: Restart service
+      service:
+        state: restarted
+        daemon_reload: yes
+        name: postgresql-11
+    

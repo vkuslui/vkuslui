@@ -1,0 +1,8 @@
+- name: Install Collectd
+  hosts: nexus
+  gather_facts: false
+  become: true
+  become_user: root
+
+  roles:
+    - install-collectd
